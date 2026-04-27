@@ -3,6 +3,7 @@ import { useState } from 'react'
 function GerenciarProdutos({ onCadastrarProduto }) {
   const [nome, setNome] = useState('')
   const [preco, setPreco] = useState('')
+  const [estoque, setEstoque] = useState('')
   const [feedback, setFeedback] = useState({
     mensagem: '',
     tipo: '',
@@ -21,6 +22,9 @@ function GerenciarProdutos({ onCadastrarProduto }) {
     const nomeProduto = nome.trim()
     const precoDigitado = preco.trim()
     const precoNormalizado = Number(precoDigitado.replace(',', '.'))
+    const estoqueDigitado = estoque.trim()
+    const estoqueNormalizado =
+      estoqueDigitado === '' ? 0 : Number(estoqueDigitado.replace(',', '.'))
 
     if (!nomeProduto) {
       setFeedback({
@@ -46,9 +50,18 @@ function GerenciarProdutos({ onCadastrarProduto }) {
       return
     }
 
+    if (!Number.isInteger(estoqueNormalizado) || estoqueNormalizado < 0) {
+      setFeedback({
+        mensagem: 'Informe um estoque inicial valido.',
+        tipo: 'erro',
+      })
+      return
+    }
+
     const resultado = await onCadastrarProduto({
       nome: nomeProduto,
       preco: precoNormalizado,
+      estoque: estoqueNormalizado,
     })
 
     if (!resultado?.success || !resultado.produto) {
@@ -62,6 +75,7 @@ function GerenciarProdutos({ onCadastrarProduto }) {
 
     setNome('')
     setPreco('')
+    setEstoque('')
     setFeedback({
       mensagem: `${resultado.produto.nome} adicionado ao catalogo.`,
       tipo: 'sucesso',
@@ -78,7 +92,7 @@ function GerenciarProdutos({ onCadastrarProduto }) {
       </div>
 
       <p className="quick-add-copy">
-        Cadastre novos itens para o catalogo sem alterar a logica atual da venda.
+        Cadastre novos itens para o catalogo e defina o estoque inicial sem alterar a logica atual da venda.
       </p>
 
       {feedback.mensagem ? (
@@ -118,6 +132,24 @@ function GerenciarProdutos({ onCadastrarProduto }) {
               }
 
               setPreco(event.target.value)
+            }}
+          />
+        </label>
+
+        <label className="field">
+          <span>Estoque inicial</span>
+          <input
+            min="0"
+            step="1"
+            type="number"
+            placeholder="0"
+            value={estoque}
+            onChange={(event) => {
+              if (feedback.mensagem) {
+                limparFeedback()
+              }
+
+              setEstoque(event.target.value)
             }}
           />
         </label>

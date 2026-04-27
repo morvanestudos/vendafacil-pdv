@@ -36,6 +36,14 @@ function normalizarProdutoBanco(produto) {
   }
 }
 
+function normalizarEstoqueEntrada(estoque) {
+  if (estoque === '' || estoque === null || estoque === undefined) {
+    return 0
+  }
+
+  return Number(estoque)
+}
+
 export async function carregarProdutos() {
   try {
     if (!supabase) {
@@ -80,14 +88,15 @@ export async function cadastrarProduto(produto) {
     const payload = {
       nome: produto?.nome?.trim(),
       preco: Number(produto?.preco),
-      estoque:
-        produto?.estoque === null || produto?.estoque === undefined
-          ? null
-          : Number(produto.estoque),
+      estoque: normalizarEstoqueEntrada(produto?.estoque),
     }
 
     if (!payload.nome || Number.isNaN(payload.preco) || payload.preco <= 0) {
       throw new Error('Dados invalidos para cadastrar o produto.')
+    }
+
+    if (!Number.isInteger(payload.estoque) || payload.estoque < 0) {
+      throw new Error('Informe um estoque inicial valido.')
     }
 
     const { data, error } = await supabase
@@ -107,6 +116,49 @@ export async function cadastrarProduto(produto) {
   } catch (error) {
     console.log('Erro ao cadastrar produto', error)
     console.error('Erro ao cadastrar produto', error)
+
+    return {
+      success: false,
+      error,
+      produto: null,
+    }
+  }
+}
+
+export async function atualizarEstoqueProduto(produtoId, novoEstoque) {
+  try {
+    if (!supabase) {
+      throw new Error(
+        'Cliente Supabase nao inicializado. Confira o arquivo .env na raiz do projeto.',
+      )
+    }
+
+    const estoqueNormalizado = normalizarEstoqueEntrada(novoEstoque)
+
+    if (!Number.isInteger(estoqueNormalizado) || estoqueNormalizado < 0) {
+      throw new Error('Informe um estoque valido para atualizar o produto.')
+    }
+
+    const { data, error } = await supabase
+      .from('produtos')
+      .update({
+        estoque: estoqueNormalizado,
+      })
+      .eq('id', produtoId)
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    return {
+      success: true,
+      produto: normalizarProdutoBanco(data),
+    }
+  } catch (error) {
+    console.log('Erro ao atualizar estoque do produto', produtoId, error)
+    console.error('Erro ao atualizar estoque do produto', produtoId, error)
 
     return {
       success: false,

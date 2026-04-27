@@ -541,6 +541,24 @@ input:focus-visible {
   margin-top: auto;
 }
 
+.product-card__editor {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.56);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.product-card__editor-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.product-card__feedback {
+  margin-top: -2px;
+}
+
 .product-card__remove {
   display: inline-flex;
   align-items: center;
@@ -581,7 +599,7 @@ input:focus-visible {
 
 .quick-add-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 16px;
 }
 

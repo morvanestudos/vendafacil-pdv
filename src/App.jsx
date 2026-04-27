@@ -8,6 +8,7 @@ import Produtos from './components/Produtos'
 import RelatorioSemanal from './components/RelatorioSemanal'
 import produtosMock from './data/produtosMock'
 import {
+  atualizarEstoqueProduto as atualizarEstoqueProdutoBanco,
   cadastrarProduto,
   carregarProdutos,
   removerProduto,
@@ -77,7 +78,15 @@ function App() {
       : null
   }
 
-  function atualizarEstoqueProduto(produtoId, variacao) {
+  function obterQuantidadeReservadaNoCarrinho(produtoId) {
+    return (
+      carrinho.find(
+        (item) => item.id === produtoId && item.origem === 'catalogo',
+      )?.quantidade ?? 0
+    )
+  }
+
+  function ajustarEstoqueProdutoDisponivel(produtoId, variacao) {
     setProdutos((produtosAtuais) =>
       produtosAtuais.map((produtoAtual) => {
         if (
@@ -100,7 +109,7 @@ function App() {
       return
     }
 
-    atualizarEstoqueProduto(itemCarrinho.id, quantidade)
+    ajustarEstoqueProdutoDisponivel(itemCarrinho.id, quantidade)
   }
 
   function validarEstoqueCarrinho(carrinhoAtual) {
@@ -164,15 +173,19 @@ function App() {
     })
 
     if (estoqueLimite !== null) {
-      atualizarEstoqueProduto(produtoSelecionado.id, -1)
+      ajustarEstoqueProdutoDisponivel(produtoSelecionado.id, -1)
     }
   }
 
-  async function cadastrarProdutoCatalogo({ nome, preco: precoProduto }) {
+  async function cadastrarProdutoCatalogo({
+    nome,
+    preco: precoProduto,
+    estoque,
+  }) {
     const resultado = await cadastrarProduto({
       nome,
       preco: precoProduto,
-      estoque: null,
+      estoque,
     })
 
     if (!resultado.success || !resultado.produto) {
@@ -195,6 +208,55 @@ function App() {
     return {
       success: true,
       produto: novoProduto,
+    }
+  }
+
+  async function editarEstoqueProdutoCatalogo(produtoId, estoqueDisponivel) {
+    const estoqueNormalizado = Number(estoqueDisponivel)
+
+    if (!Number.isInteger(estoqueNormalizado) || estoqueNormalizado < 0) {
+      return {
+        success: false,
+        error: 'Informe um estoque valido para o produto.',
+      }
+    }
+
+    const quantidadeReservada = obterQuantidadeReservadaNoCarrinho(produtoId)
+    const resultado = await atualizarEstoqueProdutoBanco(
+      produtoId,
+      estoqueNormalizado + quantidadeReservada,
+    )
+
+    if (!resultado.success || !resultado.produto) {
+      return {
+        success: false,
+        error:
+          resultado.error?.message || 'Nao foi possivel atualizar o estoque no banco.',
+      }
+    }
+
+    setProdutos((produtosAtuais) =>
+      produtosAtuais.map((item) => {
+        if (item.id !== produtoId) {
+          return item
+        }
+
+        return {
+          ...item,
+          ...resultado.produto,
+          estoque: estoqueNormalizado,
+          categoria: resultado.produto.categoria ?? item.categoria,
+          descricao: resultado.produto.descricao ?? item.descricao,
+        }
+      }),
+    )
+
+    return {
+      success: true,
+      produto: {
+        ...resultado.produto,
+        estoque: estoqueNormalizado,
+      },
     }
   }
 
@@ -264,7 +326,7 @@ function App() {
       )
 
       if (estoqueLimite !== null) {
-        atualizarEstoqueProduto(id, -1)
+        ajustarEstoqueProdutoDisponivel(id, -1)
       }
 
       return
@@ -468,6 +530,7 @@ function App() {
               produtos={produtos}
               onAdicionarProduto={adicionarAoCarrinho}
               onCadastrarProdutoCatalogo={cadastrarProdutoCatalogo}
+              onEditarEstoqueProduto={editarEstoqueProdutoCatalogo}
               onAdicionarProdutoAvulso={adicionarProdutoAvulso}
               onPrecoChange={setPreco}
               onProdutoChange={setProduto}
