@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Caixa from './components/Caixa'
 import Carrinho from './components/Carrinho'
+import Dashboard from './components/Dashboard'
 import FinalizarVenda from './components/FinalizarVenda'
 import HistoricoVendas from './components/HistoricoVendas'
 import Logo from './components/Logo'
@@ -26,6 +27,7 @@ function App() {
   const [mensagemVenda, setMensagemVenda] = useState('')
   const [tipoMensagemVenda, setTipoMensagemVenda] = useState('')
   const [salvandoVenda, setSalvandoVenda] = useState(false)
+  const [dashboardRefreshToken, setDashboardRefreshToken] = useState(0)
   const [telaAtiva, setTelaAtiva] = useState('pdv')
 
   useEffect(() => {
@@ -204,6 +206,7 @@ function App() {
     }
 
     setProdutos((produtosAtuais) => [novoProduto, ...produtosAtuais])
+    setDashboardRefreshToken((tokenAtual) => tokenAtual + 1)
 
     return {
       success: true,
@@ -250,6 +253,7 @@ function App() {
         }
       }),
     )
+    setDashboardRefreshToken((tokenAtual) => tokenAtual + 1)
 
     return {
       success: true,
@@ -270,6 +274,7 @@ function App() {
     setProdutos((produtosAtuais) =>
       produtosAtuais.filter((item) => item.id !== produtoId),
     )
+    setDashboardRefreshToken((tokenAtual) => tokenAtual + 1)
   }
 
   function adicionarProdutoAvulso(event) {
@@ -407,6 +412,7 @@ function App() {
     setFormaPagamento('')
     setTipoMensagemVenda('sucesso')
     setMensagemVenda('Venda realizada com sucesso')
+    setDashboardRefreshToken((tokenAtual) => tokenAtual + 1)
     setSalvandoVenda(false)
   }
 
@@ -429,7 +435,13 @@ function App() {
     return acumulador
   }, {})
   const conteudoHero =
-    telaAtiva === 'pdv'
+    telaAtiva === 'dashboard'
+      ? {
+          eyebrow: 'Visao executiva em tempo real',
+          descricao:
+            'Acompanhe faturamento, produtos em destaque, estoque critico e a evolucao das vendas em um dashboard com cara de produto SaaS.',
+        }
+      : telaAtiva === 'pdv'
       ? {
           eyebrow: 'Operacao de caixa com identidade profissional',
           descricao:
@@ -491,6 +503,14 @@ function App() {
         <section className="view-switcher" aria-label="Alternar entre telas">
           <button
             type="button"
+            className={`view-switcher__button${telaAtiva === 'dashboard' ? ' is-active' : ''}`}
+            onClick={() => setTelaAtiva('dashboard')}
+          >
+            Dashboard
+          </button>
+
+          <button
+            type="button"
             className={`view-switcher__button${telaAtiva === 'pdv' ? ' is-active' : ''}`}
             onClick={() => setTelaAtiva('pdv')}
           >
@@ -522,7 +542,9 @@ function App() {
           </button>
         </section>
 
-        {telaAtiva === 'pdv' ? (
+        {telaAtiva === 'dashboard' ? (
+          <Dashboard refreshKey={dashboardRefreshToken} />
+        ) : telaAtiva === 'pdv' ? (
           <section className="pdv-layout">
             <Produtos
               preco={preco}
