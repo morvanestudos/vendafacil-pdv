@@ -31,8 +31,8 @@ function Produtos({
       {produtos.length ? (
         <div className="products-grid">
           {produtos.map((item) => {
-            const produtoSemEstoque = item.estoque === 0
             const controlaEstoque = typeof item.estoque === 'number'
+            const produtoSemEstoque = controlaEstoque && item.estoque <= 0
 
             return (
               <article
@@ -53,7 +53,7 @@ function Produtos({
                     className={`product-stock${produtoSemEstoque ? ' product-stock--empty' : ''}`}
                   >
                     {produtoSemEstoque
-                      ? 'Estoque esgotado'
+                      ? 'Sem estoque'
                       : controlaEstoque
                         ? `Estoque: ${item.estoque}`
                         : 'Sem controle de estoque'}
@@ -67,7 +67,7 @@ function Produtos({
                     disabled={produtoSemEstoque}
                     onClick={() => onAdicionarProduto(item)}
                   >
-                    {produtoSemEstoque ? 'Indisponivel' : 'Adicionar'}
+                    {produtoSemEstoque ? 'Sem estoque' : 'Adicionar'}
                   </button>
 
                   <button

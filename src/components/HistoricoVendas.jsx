@@ -37,6 +37,18 @@ function formatarFormaPagamento(formaPagamento) {
   )
 }
 
+function obterNomeItemVenda(item, produtosPorId) {
+  if (item?.produto_nome) {
+    return item.produto_nome
+  }
+
+  if (item?.produto_id !== null && item?.produto_id !== undefined) {
+    return produtosPorId.get(String(item.produto_id)) ?? `Produto ${item.produto_id}`
+  }
+
+  return 'Produto sem identificacao'
+}
+
 function HistoricoVendas() {
   const [vendas, setVendas] = useState([])
   const [carregando, setCarregando] = useState(true)
@@ -66,7 +78,7 @@ function HistoricoVendas() {
           throw vendasError
         }
 
-        const vendasComItens = await Promise.all(
+        const vendasComItensBase = await Promise.all(
           (vendasData ?? []).map(async (venda) => {
             const { data: itensData, error: itensError } = await supabase
               .from('itens_venda')
@@ -83,6 +95,40 @@ function HistoricoVendas() {
             }
           }),
         )
+
+        const produtoIds = [
+          ...new Set(
+            vendasComItensBase.flatMap((venda) =>
+              venda.itens
+                .map((item) => item.produto_id)
+                .filter((produtoId) => produtoId !== null && produtoId !== undefined),
+            ),
+          ),
+        ]
+        let produtosPorId = new Map()
+
+        if (produtoIds.length) {
+          const { data: produtosData, error: produtosError } = await supabase
+            .from('produtos')
+            .select('id, nome')
+            .in('id', produtoIds)
+
+          if (produtosError) {
+            throw produtosError
+          }
+
+          produtosPorId = new Map(
+            (produtosData ?? []).map((produto) => [String(produto.id), produto.nome]),
+          )
+        }
+
+        const vendasComItens = vendasComItensBase.map((venda) => ({
+          ...venda,
+          itens: venda.itens.map((item) => ({
+            ...item,
+            produto_nome_exibicao: obterNomeItemVenda(item, produtosPorId),
+          })),
+        }))
 
         if (!ativo) {
           return
@@ -212,11 +258,11 @@ function HistoricoVendas() {
                       <div className="history-items">
                         {venda.itens.map((item) => (
                           <div
-                            key={`${venda.id}-${item.id ?? item.produto_nome}`}
+                            key={`${venda.id}-${item.id ?? item.produto_id ?? item.produto_nome}`}
                             className="history-item"
                           >
                             <div className="history-item__copy">
-                              <strong>{item.produto_nome}</strong>
+                              <strong>{item.produto_nome_exibicao}</strong>
                               <span>
                                 {item.quantidade} x{' '}
                                 {formatCurrency(Number(item.preco) || 0)}

@@ -59,23 +59,41 @@ function App() {
       : null
   }
 
-  function obterQuantidadeNoCarrinho(carrinhoAtual, produtoId) {
-    return (
-      carrinhoAtual.find((item) => item.id === produtoId)?.quantidade ?? 0
+  function atualizarEstoqueProduto(produtoId, variacao) {
+    setProdutos((produtosAtuais) =>
+      produtosAtuais.map((produtoAtual) => {
+        if (
+          produtoAtual.id !== produtoId ||
+          typeof produtoAtual.estoque !== 'number'
+        ) {
+          return produtoAtual
+        }
+
+        return {
+          ...produtoAtual,
+          estoque: Math.max(0, produtoAtual.estoque + variacao),
+        }
+      }),
     )
+  }
+
+  function devolverEstoqueItem(itemCarrinho, quantidade) {
+    if (itemCarrinho?.origem !== 'catalogo') {
+      return
+    }
+
+    atualizarEstoqueProduto(itemCarrinho.id, quantidade)
   }
 
   function validarEstoqueCarrinho(carrinhoAtual) {
     for (const item of carrinhoAtual) {
       const estoqueLimite = obterEstoqueLimite(item.id)
 
-      if (estoqueLimite === null) {
+      if (estoqueLimite === null || estoqueLimite >= 0) {
         continue
       }
 
-      if (estoqueLimite <= 0 || item.quantidade > estoqueLimite) {
-        return item
-      }
+      return item
     }
 
     return null
@@ -96,21 +114,18 @@ function App() {
     limparFeedbackVenda()
     resetarFinalizacao()
 
+    const estoqueLimite = obterEstoqueLimite(produtoSelecionado.id)
+
+    if (estoqueLimite !== null && estoqueLimite <= 0) {
+      mostrarErroVenda(`Sem estoque para ${produtoSelecionado.nome}.`)
+      return
+    }
+
     setCarrinho((carrinhoAtual) => {
-      const estoqueLimite = obterEstoqueLimite(produtoSelecionado.id)
       // Mantemos um item por produto para o operador controlar a quantidade com rapidez.
       const itemExistente = carrinhoAtual.find(
         (item) => item.id === produtoSelecionado.id,
       )
-
-      if (estoqueLimite !== null) {
-        const quantidadeAtual = itemExistente?.quantidade ?? 0
-
-        if (quantidadeAtual >= estoqueLimite) {
-          mostrarErroVenda(`Estoque esgotado para ${produtoSelecionado.nome}.`)
-          return carrinhoAtual
-        }
-      }
 
       if (itemExistente) {
         return carrinhoAtual.map((item) =>
@@ -129,6 +144,10 @@ function App() {
         },
       ]
     })
+
+    if (estoqueLimite !== null) {
+      atualizarEstoqueProduto(produtoSelecionado.id, -1)
+    }
   }
 
   function cadastrarProdutoCatalogo({ nome, preco: precoProduto }) {
@@ -177,37 +196,63 @@ function App() {
     limparFeedbackVenda()
     resetarFinalizacao()
 
-    setCarrinho((carrinhoAtual) => {
-      const itemCarrinho = carrinhoAtual.find((item) => item.id === id)
+    const itemCarrinho = carrinho.find((item) => item.id === id)
 
-      if (variacao > 0 && produtoCatalogoFoiRemovido(itemCarrinho)) {
-        mostrarErroVenda(`${itemCarrinho.nome} nao esta mais disponivel no catalogo.`)
-        return carrinhoAtual
-      }
+    if (!itemCarrinho) {
+      return
+    }
 
+    if (variacao > 0 && produtoCatalogoFoiRemovido(itemCarrinho)) {
+      mostrarErroVenda(`${itemCarrinho.nome} nao esta mais disponivel no catalogo.`)
+      return
+    }
+
+    if (variacao > 0) {
       const estoqueLimite = obterEstoqueLimite(id)
-      const quantidadeAtual = obterQuantidadeNoCarrinho(carrinhoAtual, id)
-      const novaQuantidade = quantidadeAtual + variacao
 
-      if (variacao > 0 && estoqueLimite !== null && novaQuantidade > estoqueLimite) {
+      if (estoqueLimite !== null && estoqueLimite <= 0) {
         const produtoCatalogo = obterProdutoCatalogo(id)
-        mostrarErroVenda(`Nao ha estoque suficiente para ${produtoCatalogo?.nome ?? 'este item'}.`)
-        return carrinhoAtual
+        mostrarErroVenda(`Sem estoque para ${produtoCatalogo?.nome ?? 'este item'}.`)
+        return
       }
 
-      return carrinhoAtual
+      setCarrinho((carrinhoAtual) =>
+        carrinhoAtual.map((item) =>
+          item.id === id
+            ? { ...item, quantidade: item.quantidade + 1 }
+            : item,
+        ),
+      )
+
+      if (estoqueLimite !== null) {
+        atualizarEstoqueProduto(id, -1)
+      }
+
+      return
+    }
+
+    setCarrinho((carrinhoAtual) =>
+      carrinhoAtual
         .map((item) =>
           item.id === id
             ? { ...item, quantidade: item.quantidade + variacao }
             : item,
         )
-        .filter((item) => item.quantidade > 0)
-    })
+        .filter((item) => item.quantidade > 0),
+    )
+    devolverEstoqueItem(itemCarrinho, Math.abs(variacao))
   }
 
   function removerItem(id) {
     limparFeedbackVenda()
     resetarFinalizacao()
+
+    const itemCarrinho = carrinho.find((item) => item.id === id)
+
+    if (itemCarrinho) {
+      devolverEstoqueItem(itemCarrinho, itemCarrinho.quantidade)
+    }
+
     setCarrinho((carrinhoAtual) => carrinhoAtual.filter((item) => item.id !== id))
   }
 
@@ -256,20 +301,6 @@ function App() {
       return
     }
 
-    setProdutos((produtosAtuais) =>
-      produtosAtuais.map((produtoAtual) => {
-        const itemVendido = carrinho.find((item) => item.id === produtoAtual.id)
-
-        if (!itemVendido || typeof produtoAtual.estoque !== 'number') {
-          return produtoAtual
-        }
-
-        return {
-          ...produtoAtual,
-          estoque: Math.max(0, produtoAtual.estoque - itemVendido.quantidade),
-        }
-      }),
-    )
     setCarrinho([])
     setMostrarPagamento(false)
     setFormaPagamento('')
@@ -292,10 +323,7 @@ function App() {
       return acumulador
     }
 
-    const estoqueLimite = obterEstoqueLimite(item.id)
-
-    acumulador[item.id] =
-      estoqueLimite === null ? null : Math.max(0, estoqueLimite - item.quantidade)
+    acumulador[item.id] = obterEstoqueLimite(item.id)
 
     return acumulador
   }, {})

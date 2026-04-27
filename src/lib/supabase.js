@@ -21,8 +21,229 @@ export const supabase =
     ? createClient(supabaseProjectUrl, supabaseAnonKey)
     : null
 
+function normalizarProdutoId(item) {
+  const itemId = item?.id
+
+  if (item?.origem !== 'catalogo') {
+    return null
+  }
+
+  if (typeof itemId === 'string') {
+    if (!itemId.trim() || itemId.startsWith('catalogo-') || itemId.startsWith('avulso-')) {
+      return null
+    }
+
+    return /^\d+$/.test(itemId) ? Number(itemId) : itemId
+  }
+
+  return typeof itemId === 'number' ? itemId : null
+}
+
+function normalizarItensVenda(carrinho) {
+  return carrinho.map((item, index) => {
+    const produtoNome = item?.nome?.trim()
+    const quantidade = Number(item?.quantidade)
+    const preco = Number(item?.preco)
+    const produtoId = normalizarProdutoId(item)
+
+    if (!produtoNome || Number.isNaN(quantidade) || Number.isNaN(preco)) {
+      throw new Error(`Item invalido no carrinho na posicao ${index + 1}.`)
+    }
+
+    return {
+      nome: produtoNome,
+      preco,
+      produtoId,
+      quantidade,
+    }
+  })
+}
+
+async function buscarProdutosBanco(produtoIds) {
+  if (!produtoIds.length) {
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from('produtos')
+    .select('id, nome, estoque')
+    .in('id', produtoIds)
+
+  if (error) {
+    throw error
+  }
+
+  return data ?? []
+}
+
+function validarEstoqueBanco(itensVenda, produtosBanco) {
+  const produtosPorId = new Map(
+    produtosBanco.map((produto) => [String(produto.id), produto]),
+  )
+
+  return itensVenda
+    .filter((item) => item.produtoId !== null)
+    .map((item) => {
+      const produtoBanco = produtosPorId.get(String(item.produtoId))
+
+      if (!produtoBanco) {
+        throw new Error(
+          `Produto ${item.nome} nao foi encontrado na tabela produtos.`,
+        )
+      }
+
+      if (typeof produtoBanco.estoque !== 'number') {
+        return null
+      }
+
+      if (produtoBanco.estoque < item.quantidade) {
+        throw new Error(
+          `Estoque insuficiente no banco para ${produtoBanco.nome ?? item.nome}.`,
+        )
+      }
+
+      return {
+        estoqueAnterior: produtoBanco.estoque,
+        estoqueNovo: produtoBanco.estoque - item.quantidade,
+        nome: produtoBanco.nome ?? item.nome,
+        produtoId: produtoBanco.id,
+      }
+    })
+    .filter(Boolean)
+}
+
+async function inserirItensVenda(vendaId, itensVenda) {
+  const itensPayload = itensVenda.map((item) => ({
+    venda_id: vendaId,
+    produto_id: item.produtoId,
+    quantidade: item.quantidade,
+    preco: item.preco,
+  }))
+
+  const { data, error } = await supabase
+    .from('itens_venda')
+    .insert(itensPayload)
+    .select()
+
+  if (
+    error?.code === '23502' &&
+    String(error.message ?? '').toLowerCase().includes('produto_id')
+  ) {
+    throw new Error(
+      'Existem itens no carrinho sem produto_id no banco. Cadastre esses produtos antes de finalizar a venda.',
+    )
+  }
+
+  if (
+    error?.code === '42703' ||
+    String(error.message ?? '').toLowerCase().includes('produto_id')
+  ) {
+    console.log(
+      'Tabela itens_venda sem suporte a produto_id, tentando payload legado com produto_nome.',
+      error,
+    )
+
+    const itensLegacyPayload = itensVenda.map((item) => ({
+      venda_id: vendaId,
+      produto_nome: item.nome,
+      quantidade: item.quantidade,
+      preco: item.preco,
+    }))
+
+    const { data: legacyData, error: legacyError } = await supabase
+      .from('itens_venda')
+      .insert(itensLegacyPayload)
+      .select()
+
+    if (legacyError) {
+      throw legacyError
+    }
+
+    return legacyData ?? []
+  }
+
+  if (error) {
+    throw error
+  }
+
+  return data ?? []
+}
+
+async function atualizarEstoqueBanco(ajustesEstoque) {
+  const atualizacoesAplicadas = []
+
+  for (const ajuste of ajustesEstoque) {
+    const { data, error } = await supabase
+      .from('produtos')
+      .update({
+        estoque: ajuste.estoqueNovo,
+      })
+      .eq('id', ajuste.produtoId)
+      .eq('estoque', ajuste.estoqueAnterior)
+      .select('id, estoque')
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+
+    if (!data) {
+      throw new Error(
+        `O estoque de ${ajuste.nome} mudou antes de concluir a venda. Tente novamente.`,
+      )
+    }
+
+    atualizacoesAplicadas.push(ajuste)
+  }
+
+  return atualizacoesAplicadas
+}
+
+async function reverterEstoqueBanco(ajustesEstoque) {
+  for (const ajuste of ajustesEstoque) {
+    const { error } = await supabase
+      .from('produtos')
+      .update({
+        estoque: ajuste.estoqueAnterior,
+      })
+      .eq('id', ajuste.produtoId)
+      .eq('estoque', ajuste.estoqueNovo)
+
+    if (error) {
+      console.log('Falha ao reverter estoque no banco', ajuste, error)
+    }
+  }
+}
+
+async function reverterVenda(vendaId) {
+  if (!vendaId) {
+    return
+  }
+
+  const { error: itensError } = await supabase
+    .from('itens_venda')
+    .delete()
+    .eq('venda_id', vendaId)
+
+  if (itensError) {
+    console.log('Falha ao remover itens da venda apos erro', vendaId, itensError)
+  }
+
+  const { error: vendaError } = await supabase
+    .from('vendas')
+    .delete()
+    .eq('id', vendaId)
+
+  if (vendaError) {
+    console.log('Falha ao remover venda apos erro', vendaId, vendaError)
+  }
+}
+
 export async function salvarVenda({ carrinho, total, formaPagamento }) {
   console.log('Salvando venda', carrinho, total, formaPagamento)
+
+  let vendaCriada = null
+  let estoqueAtualizado = []
 
   try {
     if (!supabase) {
@@ -39,21 +260,12 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
       throw new Error('Selecione uma forma de pagamento antes de finalizar.')
     }
 
-    const itensVenda = carrinho.map((item, index) => {
-      const produtoNome = item?.nome?.trim()
-      const quantidade = Number(item?.quantidade)
-      const preco = Number(item?.preco)
-
-      if (!produtoNome || Number.isNaN(quantidade) || Number.isNaN(preco)) {
-        throw new Error(`Item invalido no carrinho na posicao ${index + 1}.`)
-      }
-
-      return {
-        produto_nome: produtoNome,
-        quantidade,
-        preco,
-      }
-    })
+    const itensVenda = normalizarItensVenda(carrinho)
+    const produtoIds = itensVenda
+      .filter((item) => item.produtoId !== null)
+      .map((item) => item.produtoId)
+    const produtosBanco = await buscarProdutosBanco(produtoIds)
+    const ajustesEstoque = validarEstoqueBanco(itensVenda, produtosBanco)
 
     const { data: venda, error: vendaError } = await supabase
       .from('vendas')
@@ -70,31 +282,31 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
       throw vendaError
     }
 
-    console.log('Venda criada', venda)
+    vendaCriada = venda
+    console.log('Venda criada', vendaCriada)
 
-    const itensPayload = itensVenda.map((item) => ({
-      venda_id: venda.id,
-      ...item,
-    }))
-
-    const { data: itensCriados, error: itensError } = await supabase
-      .from('itens_venda')
-      .insert(itensPayload)
-      .select()
-
-    if (itensError) {
-      throw itensError
-    }
-
+    const itensCriados = await inserirItensVenda(vendaCriada.id, itensVenda)
     console.log('Itens da venda criados', itensCriados)
+
+    estoqueAtualizado = await atualizarEstoqueBanco(ajustesEstoque)
+    console.log('Estoque atualizado no banco', estoqueAtualizado)
 
     return {
       success: true,
-      venda,
+      venda: vendaCriada,
       itens: itensCriados,
     }
   } catch (error) {
     console.error('Erro ao salvar venda', error)
+    console.log('Erro ao salvar venda', error)
+
+    if (estoqueAtualizado.length) {
+      await reverterEstoqueBanco(estoqueAtualizado)
+    }
+
+    if (vendaCriada?.id) {
+      await reverterVenda(vendaCriada.id)
+    }
 
     return {
       success: false,
