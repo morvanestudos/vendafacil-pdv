@@ -1411,6 +1411,10 @@ input:focus-visible {
 }
 
 .login-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   min-height: 64px;
   margin-top: 4px;
 }
