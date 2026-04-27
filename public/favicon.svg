@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="vf-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="16" fill="#0f172a" />
+  <rect x="8" y="8" width="48" height="48" rx="12" fill="url(#vf-gradient)" />
+  <text
+    x="32"
+    y="39"
+    text-anchor="middle"
+    font-family="Segoe UI, Arial, sans-serif"
+    font-size="22"
+    font-weight="700"
+    fill="#ffffff"
+  >
+    VF
+  </text>
+</svg>
