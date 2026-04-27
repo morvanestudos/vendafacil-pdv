@@ -7,25 +7,18 @@ import Logo from './components/Logo'
 import Produtos from './components/Produtos'
 import RelatorioSemanal from './components/RelatorioSemanal'
 import produtosMock from './data/produtosMock'
-import { salvarVenda } from './lib/supabase'
+import {
+  cadastrarProduto,
+  carregarProdutos,
+  removerProduto,
+  salvarVenda,
+} from './lib/supabase'
 import formatCurrency from './utils/formatCurrency'
-
-function criarSlugProduto(nome) {
-  return (
-    nome
-      .toLowerCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') || 'produto'
-  )
-}
 
 function App() {
   const [produto, setProduto] = useState('')
   const [preco, setPreco] = useState('')
-  const [produtos, setProdutos] = useState(produtosMock)
+  const [produtos, setProdutos] = useState([])
   const [carrinho, setCarrinho] = useState([])
   const [mostrarPagamento, setMostrarPagamento] = useState(false)
   const [formaPagamento, setFormaPagamento] = useState('')
@@ -36,6 +29,31 @@ function App() {
 
   useEffect(() => {
     document.title = 'VendaFácil PDV'
+  }, [])
+
+  useEffect(() => {
+    let ativo = true
+
+    async function carregarCatalogo() {
+      const resultado = await carregarProdutos()
+
+      if (!ativo) {
+        return
+      }
+
+      if (!resultado.success) {
+        setProdutos(produtosMock)
+        return
+      }
+
+      setProdutos(resultado.produtos)
+    }
+
+    carregarCatalogo()
+
+    return () => {
+      ativo = false
+    }
   }, [])
 
   function mostrarErroVenda(mensagem) {
@@ -150,22 +168,43 @@ function App() {
     }
   }
 
-  function cadastrarProdutoCatalogo({ nome, preco: precoProduto }) {
-    const novoProduto = {
-      id: `catalogo-${criarSlugProduto(nome)}-${Date.now()}`,
+  async function cadastrarProdutoCatalogo({ nome, preco: precoProduto }) {
+    const resultado = await cadastrarProduto({
       nome,
       preco: precoProduto,
-      categoria: 'Cadastro manual',
-      descricao: 'Produto adicionado pelo operador.',
       estoque: null,
+    })
+
+    if (!resultado.success || !resultado.produto) {
+      return {
+        success: false,
+        error:
+          resultado.error?.message || 'Nao foi possivel cadastrar o produto no banco.',
+      }
+    }
+
+    const novoProduto = {
+      ...resultado.produto,
+      categoria: resultado.produto.categoria ?? 'Cadastro manual',
+      descricao:
+        resultado.produto.descricao ?? 'Produto adicionado pelo operador.',
     }
 
     setProdutos((produtosAtuais) => [novoProduto, ...produtosAtuais])
 
-    return novoProduto
+    return {
+      success: true,
+      produto: novoProduto,
+    }
   }
 
-  function removerProdutoCatalogo(produtoId) {
+  async function removerProdutoCatalogo(produtoId) {
+    const resultado = await removerProduto(produtoId)
+
+    if (!resultado.success) {
+      return
+    }
+
     setProdutos((produtosAtuais) =>
       produtosAtuais.filter((item) => item.id !== produtoId),
     )

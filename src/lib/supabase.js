@@ -21,6 +21,132 @@ export const supabase =
     ? createClient(supabaseProjectUrl, supabaseAnonKey)
     : null
 
+function normalizarProdutoBanco(produto) {
+  if (!produto) {
+    return null
+  }
+
+  return {
+    ...produto,
+    preco: Number(produto.preco) || 0,
+    estoque:
+      produto.estoque === null || produto.estoque === undefined
+        ? null
+        : Number(produto.estoque),
+  }
+}
+
+export async function carregarProdutos() {
+  try {
+    if (!supabase) {
+      throw new Error(
+        'Cliente Supabase nao inicializado. Confira o arquivo .env na raiz do projeto.',
+      )
+    }
+
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('*')
+      .order('id', { ascending: false })
+
+    if (error) {
+      throw error
+    }
+
+    return {
+      success: true,
+      produtos: (data ?? []).map(normalizarProdutoBanco).filter(Boolean),
+    }
+  } catch (error) {
+    console.log('Erro ao carregar produtos', error)
+    console.error('Erro ao carregar produtos', error)
+
+    return {
+      success: false,
+      error,
+      produtos: [],
+    }
+  }
+}
+
+export async function cadastrarProduto(produto) {
+  try {
+    if (!supabase) {
+      throw new Error(
+        'Cliente Supabase nao inicializado. Confira o arquivo .env na raiz do projeto.',
+      )
+    }
+
+    const payload = {
+      nome: produto?.nome?.trim(),
+      preco: Number(produto?.preco),
+      estoque:
+        produto?.estoque === null || produto?.estoque === undefined
+          ? null
+          : Number(produto.estoque),
+    }
+
+    if (!payload.nome || Number.isNaN(payload.preco) || payload.preco <= 0) {
+      throw new Error('Dados invalidos para cadastrar o produto.')
+    }
+
+    const { data, error } = await supabase
+      .from('produtos')
+      .insert([payload])
+      .select()
+      .single()
+
+    if (error) {
+      throw error
+    }
+
+    return {
+      success: true,
+      produto: normalizarProdutoBanco(data),
+    }
+  } catch (error) {
+    console.log('Erro ao cadastrar produto', error)
+    console.error('Erro ao cadastrar produto', error)
+
+    return {
+      success: false,
+      error,
+      produto: null,
+    }
+  }
+}
+
+export async function removerProduto(produtoId) {
+  try {
+    if (!supabase) {
+      throw new Error(
+        'Cliente Supabase nao inicializado. Confira o arquivo .env na raiz do projeto.',
+      )
+    }
+
+    const { error } = await supabase
+      .from('produtos')
+      .delete()
+      .eq('id', produtoId)
+
+    if (error) {
+      throw error
+    }
+
+    return {
+      success: true,
+    }
+  } catch (error) {
+    console.log('Erro ao remover produto', produtoId, error)
+    console.error('Erro ao remover produto', produtoId, error)
+
+    return {
+      success: false,
+      error,
+    }
+  }
+}
+
 function normalizarProdutoId(item) {
   const itemId = item?.id
 

@@ -15,7 +15,7 @@ function GerenciarProdutos({ onCadastrarProduto }) {
     })
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
 
     const nomeProduto = nome.trim()
@@ -46,15 +46,24 @@ function GerenciarProdutos({ onCadastrarProduto }) {
       return
     }
 
-    const produtoAdicionado = onCadastrarProduto({
+    const resultado = await onCadastrarProduto({
       nome: nomeProduto,
       preco: precoNormalizado,
     })
 
+    if (!resultado?.success || !resultado.produto) {
+      setFeedback({
+        mensagem:
+          resultado?.error || 'Nao foi possivel adicionar o produto no banco.',
+        tipo: 'erro',
+      })
+      return
+    }
+
     setNome('')
     setPreco('')
     setFeedback({
-      mensagem: `${produtoAdicionado.nome} adicionado ao catalogo.`,
+      mensagem: `${resultado.produto.nome} adicionado ao catalogo.`,
       tipo: 'sucesso',
     })
   }
