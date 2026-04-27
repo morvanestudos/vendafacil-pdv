@@ -17,7 +17,7 @@ import {
 } from './lib/supabase'
 import formatCurrency from './utils/formatCurrency'
 
-function App() {
+function App({ initialScreen = 'pdv' }) {
   const [produto, setProduto] = useState('')
   const [preco, setPreco] = useState('')
   const [produtos, setProdutos] = useState([])
@@ -28,7 +28,7 @@ function App() {
   const [tipoMensagemVenda, setTipoMensagemVenda] = useState('')
   const [salvandoVenda, setSalvandoVenda] = useState(false)
   const [dashboardRefreshToken, setDashboardRefreshToken] = useState(0)
-  const [telaAtiva, setTelaAtiva] = useState('pdv')
+  const [telaAtiva, setTelaAtiva] = useState(initialScreen)
 
   useEffect(() => {
     document.title = 'VendaFácil PDV'

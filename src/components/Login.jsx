@@ -4,11 +4,14 @@ function Login({
   email = '',
   senha = '',
   erro = '',
+  mensagem = '',
   carregando = false,
+  modoCadastro = false,
   onEmailChange,
   onSenhaChange,
   onSubmit,
   onEsqueciSenhaClick,
+  onAlternarModo,
 }) {
   function handleSubmit(event) {
     event.preventDefault()
@@ -22,16 +25,27 @@ function Login({
 
         <div className="login-copy">
           <span className="section-label login-label">Acesso</span>
-          <h1>Acesse o VendaFácil PDV</h1>
+          <h1>
+            {modoCadastro
+              ? 'Crie sua conta no VendaFácil PDV'
+              : 'Acesse o VendaFácil PDV'}
+          </h1>
           <p>
-            Entre com suas credenciais para continuar operando o caixa com
-            seguranca e rapidez.
+            {modoCadastro
+              ? 'Cadastre seu acesso para entrar no painel e operar o caixa com seguranca.'
+              : 'Entre com suas credenciais para continuar operando o caixa com seguranca e rapidez.'}
           </p>
         </div>
 
         {erro ? (
           <div className="login-error" role="alert">
             {erro}
+          </div>
+        ) : null}
+
+        {mensagem ? (
+          <div className="login-note" role="status">
+            {mensagem}
           </div>
         ) : null}
 
@@ -62,21 +76,35 @@ function Login({
             {carregando ? (
               <>
                 <span className="button-spinner" aria-hidden="true" />
-                Entrando...
+                {modoCadastro ? 'Criando conta...' : 'Entrando...'}
               </>
             ) : (
-              'Entrar'
+              modoCadastro ? 'Criar conta' : 'Entrar'
             )}
           </button>
         </form>
 
-        <button
-          type="button"
-          className="login-link"
-          onClick={onEsqueciSenhaClick}
-        >
-          Esqueci minha senha
-        </button>
+        <div className="login-link-group">
+          {onEsqueciSenhaClick ? (
+            <button
+              type="button"
+              className="login-link"
+              onClick={onEsqueciSenhaClick}
+            >
+              Esqueci minha senha
+            </button>
+          ) : null}
+
+          {onAlternarModo ? (
+            <button
+              type="button"
+              className="login-link login-link--secondary"
+              onClick={onAlternarModo}
+            >
+              {modoCadastro ? 'Ja tem conta? Entrar' : 'Nao tem conta? Criar conta'}
+            </button>
+          ) : null}
+        </div>
       </div>
     </section>
   )
