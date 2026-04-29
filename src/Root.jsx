@@ -53,6 +53,27 @@ function Root() {
     setRotaAtual(rota)
   }
 
+  async function handleLogout() {
+    try {
+      if (!supabase) {
+        throw new Error(
+          'Cliente Supabase nao inicializado. Confira o arquivo .env na raiz do projeto.',
+        )
+      }
+
+      const { error } = await supabase.auth.signOut()
+
+      if (error) {
+        throw error
+      }
+
+      window.location.href = LOGIN_ROUTE
+    } catch (error) {
+      console.error('Erro ao encerrar sessao do usuario', error)
+      throw error
+    }
+  }
+
   useEffect(() => {
     function sincronizarRota() {
       setRotaAtual(normalizarRota(window.location.pathname))
@@ -78,9 +99,9 @@ function Root() {
         }
 
         const {
-          data: { session },
+          data: { user },
           error,
-        } = await supabase.auth.getSession()
+        } = await supabase.auth.getUser()
 
         if (error) {
           throw error
@@ -90,7 +111,7 @@ function Root() {
           return
         }
 
-        setSessao(session ?? null)
+        setSessao(user ? { user } : null)
       } catch (error) {
         console.error('Erro ao carregar sessao do usuario', error)
 
@@ -115,7 +136,7 @@ function Root() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSessao(session ?? null)
+      setSessao(session?.user ? { user: session.user } : null)
     })
 
     return () => {
@@ -156,7 +177,7 @@ function Root() {
     )
   }
 
-  return <App initialScreen="dashboard" />
+  return <App initialScreen="dashboard" onLogout={handleLogout} />
 }
 
 export default Root

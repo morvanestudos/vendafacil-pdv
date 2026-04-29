@@ -17,7 +17,7 @@ import {
 } from './lib/supabase'
 import formatCurrency from './utils/formatCurrency'
 
-function App({ initialScreen = 'pdv' }) {
+function App({ initialScreen = 'pdv', onLogout }) {
   const [produto, setProduto] = useState('')
   const [preco, setPreco] = useState('')
   const [produtos, setProdutos] = useState([])
@@ -27,6 +27,7 @@ function App({ initialScreen = 'pdv' }) {
   const [mensagemVenda, setMensagemVenda] = useState('')
   const [tipoMensagemVenda, setTipoMensagemVenda] = useState('')
   const [salvandoVenda, setSalvandoVenda] = useState(false)
+  const [saindo, setSaindo] = useState(false)
   const [dashboardRefreshToken, setDashboardRefreshToken] = useState(0)
   const [telaAtiva, setTelaAtiva] = useState(initialScreen)
 
@@ -416,6 +417,27 @@ function App({ initialScreen = 'pdv' }) {
     setSalvandoVenda(false)
   }
 
+  async function handleLogoutClick() {
+    if (saindo) {
+      return
+    }
+
+    const confirmarSaida = window.confirm('Deseja sair da sua conta?')
+
+    if (!confirmarSaida) {
+      return
+    }
+
+    try {
+      setSaindo(true)
+      await onLogout?.()
+      setSaindo(false)
+    } catch (error) {
+      console.error('Erro ao realizar logout', error)
+      setSaindo(false)
+    }
+  }
+
   const total = carrinho.reduce(
     (acumulador, item) => acumulador + item.preco * item.quantidade,
     0,
@@ -469,6 +491,22 @@ function App({ initialScreen = 'pdv' }) {
     <div className="app-shell">
       <main className="pdv-app">
         <header className="hero-banner">
+          <button
+            type="button"
+            className="logout-button"
+            onClick={handleLogoutClick}
+            disabled={saindo}
+          >
+            {saindo ? (
+              <>
+                <span className="button-spinner" aria-hidden="true" />
+                Saindo...
+              </>
+            ) : (
+              'Sair'
+            )}
+          </button>
+
           <div className="hero-copy">
             <span className="eyebrow">{conteudoHero.eyebrow}</span>
             <h1 className="hero-title">
