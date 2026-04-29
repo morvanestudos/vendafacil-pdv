@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { supabase } from '../lib/supabase'
+import { getUser, supabase } from '../lib/supabase'
 import formatCurrency from '../utils/formatCurrency'
 
 const compactNumberFormatter = new Intl.NumberFormat('pt-BR', {
@@ -163,20 +163,28 @@ function Dashboard({ refreshKey = 0 }) {
           )
         }
 
+        const user = await getUser()
+
+        if (!user?.id) {
+          throw new Error('Usuario nao autenticado. Faca login novamente.')
+        }
+
         const { inicioHoje, inicioAmanha, inicioPeriodo } = obterPeriodoDashboard()
 
         const [vendasResultado, produtosResultado, itensResultado] = await Promise.all([
           supabase
             .from('vendas')
             .select('total, created_at')
+            .eq('user_id', user.id)
             .gte('created_at', inicioPeriodo.toISOString())
             .lt('created_at', inicioAmanha.toISOString())
             .order('created_at', { ascending: true }),
           supabase
             .from('produtos')
             .select('id, nome, estoque')
+            .eq('user_id', user.id)
             .order('nome', { ascending: true }),
-          supabase.from('itens_venda').select('*'),
+          supabase.from('itens_venda').select('*').eq('user_id', user.id),
         ])
 
         if (vendasResultado.error) {
@@ -246,6 +254,7 @@ function Dashboard({ refreshKey = 0 }) {
           estoqueCritico,
         })
       } catch (error) {
+        console.log('Erro ao carregar dashboard', error)
         console.error('Erro ao carregar dashboard', error)
 
         if (!ativo) {

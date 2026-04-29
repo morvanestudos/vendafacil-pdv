@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { getUser, supabase } from '../lib/supabase'
 import formatCurrency from '../utils/formatCurrency'
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -69,9 +69,16 @@ function HistoricoVendas() {
           )
         }
 
+        const user = await getUser()
+
+        if (!user?.id) {
+          throw new Error('Usuario nao autenticado. Faca login novamente.')
+        }
+
         const { data: vendasData, error: vendasError } = await supabase
           .from('vendas')
           .select('*')
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false })
 
         if (vendasError) {
@@ -84,6 +91,7 @@ function HistoricoVendas() {
               .from('itens_venda')
               .select('*')
               .eq('venda_id', venda.id)
+              .eq('user_id', user.id)
 
             if (itensError) {
               throw itensError
@@ -112,6 +120,7 @@ function HistoricoVendas() {
             .from('produtos')
             .select('id, nome')
             .in('id', produtoIds)
+            .eq('user_id', user.id)
 
           if (produtosError) {
             throw produtosError
@@ -136,6 +145,7 @@ function HistoricoVendas() {
 
         setVendas(vendasComItens)
       } catch (error) {
+        console.log('Erro ao carregar historico de vendas', error)
         console.error('Erro ao carregar historico de vendas', error)
 
         if (!ativo) {

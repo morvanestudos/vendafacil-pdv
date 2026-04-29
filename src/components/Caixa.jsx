@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { getUser, supabase } from '../lib/supabase'
 import formatCurrency from '../utils/formatCurrency'
 
 const fullDateFormatter = new Intl.DateTimeFormat('pt-BR', {
@@ -44,11 +44,18 @@ function Caixa() {
           )
         }
 
+        const user = await getUser()
+
+        if (!user?.id) {
+          throw new Error('Usuario nao autenticado. Faca login novamente.')
+        }
+
         const { inicioDoDia, inicioDoProximoDia } = obterIntervaloDoDiaAtual()
 
         const { data: vendasData, error: vendasError } = await supabase
           .from('vendas')
           .select('total, forma_pagamento, created_at')
+          .eq('user_id', user.id)
           .gte('created_at', inicioDoDia.toISOString())
           .lt('created_at', inicioDoProximoDia.toISOString())
           .order('created_at', { ascending: false })
@@ -89,6 +96,7 @@ function Caixa() {
 
         setResumo(resumoCalculado)
       } catch (error) {
+        console.log('Erro ao carregar caixa do dia', error)
         console.error('Erro ao carregar caixa do dia', error)
 
         if (!ativo) {

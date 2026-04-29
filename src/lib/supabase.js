@@ -21,6 +21,38 @@ export const supabase =
     ? createClient(supabaseProjectUrl, supabaseAnonKey)
     : null
 
+export async function getUser() {
+  try {
+    if (!supabase) {
+      throw new Error(
+        'Cliente Supabase nao inicializado. Confira o arquivo .env na raiz do projeto.',
+      )
+    }
+
+    const { data, error } = await supabase.auth.getUser()
+
+    if (error) {
+      throw error
+    }
+
+    return data?.user ?? null
+  } catch (error) {
+    console.log('Erro ao obter usuario autenticado', error)
+    console.error('Erro ao obter usuario autenticado', error)
+    return null
+  }
+}
+
+async function getRequiredUser() {
+  const user = await getUser()
+
+  if (!user?.id) {
+    throw new Error('Usuario nao autenticado. Faca login novamente.')
+  }
+
+  return user
+}
+
 function normalizarProdutoBanco(produto) {
   if (!produto) {
     return null
@@ -52,9 +84,12 @@ export async function carregarProdutos() {
       )
     }
 
+    const user = await getRequiredUser()
+
     const { data, error } = await supabase
       .from('produtos')
       .select('*')
+      .eq('user_id', user.id)
       .order('id', { ascending: false })
 
     if (error) {
@@ -85,10 +120,13 @@ export async function cadastrarProduto(produto) {
       )
     }
 
+    const user = await getRequiredUser()
+
     const payload = {
       nome: produto?.nome?.trim(),
       preco: Number(produto?.preco),
       estoque: normalizarEstoqueEntrada(produto?.estoque),
+      user_id: user.id,
     }
 
     if (!payload.nome || Number.isNaN(payload.preco) || payload.preco <= 0) {
@@ -133,6 +171,7 @@ export async function atualizarEstoqueProduto(produtoId, novoEstoque) {
       )
     }
 
+    const user = await getRequiredUser()
     const estoqueNormalizado = normalizarEstoqueEntrada(novoEstoque)
 
     if (!Number.isInteger(estoqueNormalizado) || estoqueNormalizado < 0) {
@@ -145,6 +184,7 @@ export async function atualizarEstoqueProduto(produtoId, novoEstoque) {
         estoque: estoqueNormalizado,
       })
       .eq('id', produtoId)
+      .eq('user_id', user.id)
       .select()
       .single()
 
@@ -176,10 +216,13 @@ export async function removerProduto(produtoId) {
       )
     }
 
+    const user = await getRequiredUser()
+
     const { error } = await supabase
       .from('produtos')
       .delete()
       .eq('id', produtoId)
+      .eq('user_id', user.id)
 
     if (error) {
       throw error
@@ -237,7 +280,7 @@ function normalizarItensVenda(carrinho) {
   })
 }
 
-async function buscarProdutosBanco(produtoIds) {
+async function buscarProdutosBanco(produtoIds, userId) {
   if (!produtoIds.length) {
     return []
   }
@@ -246,6 +289,7 @@ async function buscarProdutosBanco(produtoIds) {
     .from('produtos')
     .select('id, nome, estoque')
     .in('id', produtoIds)
+    .eq('user_id', userId)
 
   if (error) {
     throw error
@@ -290,12 +334,13 @@ function validarEstoqueBanco(itensVenda, produtosBanco) {
     .filter(Boolean)
 }
 
-async function inserirItensVenda(vendaId, itensVenda) {
+async function inserirItensVenda(vendaId, itensVenda, userId) {
   const itensPayload = itensVenda.map((item) => ({
     venda_id: vendaId,
     produto_id: item.produtoId,
     quantidade: item.quantidade,
     preco: item.preco,
+    user_id: userId,
   }))
 
   const { data, error } = await supabase
@@ -326,6 +371,7 @@ async function inserirItensVenda(vendaId, itensVenda) {
       produto_nome: item.nome,
       quantidade: item.quantidade,
       preco: item.preco,
+      user_id: userId,
     }))
 
     const { data: legacyData, error: legacyError } = await supabase
@@ -347,7 +393,7 @@ async function inserirItensVenda(vendaId, itensVenda) {
   return data ?? []
 }
 
-async function atualizarEstoqueBanco(ajustesEstoque) {
+async function atualizarEstoqueBanco(ajustesEstoque, userId) {
   const atualizacoesAplicadas = []
 
   for (const ajuste of ajustesEstoque) {
@@ -357,6 +403,7 @@ async function atualizarEstoqueBanco(ajustesEstoque) {
         estoque: ajuste.estoqueNovo,
       })
       .eq('id', ajuste.produtoId)
+      .eq('user_id', userId)
       .eq('estoque', ajuste.estoqueAnterior)
       .select('id, estoque')
       .maybeSingle()
@@ -377,7 +424,7 @@ async function atualizarEstoqueBanco(ajustesEstoque) {
   return atualizacoesAplicadas
 }
 
-async function reverterEstoqueBanco(ajustesEstoque) {
+async function reverterEstoqueBanco(ajustesEstoque, userId) {
   for (const ajuste of ajustesEstoque) {
     const { error } = await supabase
       .from('produtos')
@@ -385,6 +432,7 @@ async function reverterEstoqueBanco(ajustesEstoque) {
         estoque: ajuste.estoqueAnterior,
       })
       .eq('id', ajuste.produtoId)
+      .eq('user_id', userId)
       .eq('estoque', ajuste.estoqueNovo)
 
     if (error) {
@@ -393,7 +441,7 @@ async function reverterEstoqueBanco(ajustesEstoque) {
   }
 }
 
-async function reverterVenda(vendaId) {
+async function reverterVenda(vendaId, userId) {
   if (!vendaId) {
     return
   }
@@ -402,6 +450,7 @@ async function reverterVenda(vendaId) {
     .from('itens_venda')
     .delete()
     .eq('venda_id', vendaId)
+    .eq('user_id', userId)
 
   if (itensError) {
     console.log('Falha ao remover itens da venda apos erro', vendaId, itensError)
@@ -411,6 +460,7 @@ async function reverterVenda(vendaId) {
     .from('vendas')
     .delete()
     .eq('id', vendaId)
+    .eq('user_id', userId)
 
   if (vendaError) {
     console.log('Falha ao remover venda apos erro', vendaId, vendaError)
@@ -422,6 +472,7 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
 
   let vendaCriada = null
   let estoqueAtualizado = []
+  let userId = null
 
   try {
     if (!supabase) {
@@ -438,11 +489,13 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
       throw new Error('Selecione uma forma de pagamento antes de finalizar.')
     }
 
+    const user = await getRequiredUser()
+    userId = user.id
     const itensVenda = normalizarItensVenda(carrinho)
     const produtoIds = itensVenda
       .filter((item) => item.produtoId !== null)
       .map((item) => item.produtoId)
-    const produtosBanco = await buscarProdutosBanco(produtoIds)
+    const produtosBanco = await buscarProdutosBanco(produtoIds, userId)
     const ajustesEstoque = validarEstoqueBanco(itensVenda, produtosBanco)
 
     const { data: venda, error: vendaError } = await supabase
@@ -451,6 +504,7 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
         {
           total: Number(total),
           forma_pagamento: formaPagamento,
+          user_id: userId,
         },
       ])
       .select()
@@ -463,10 +517,10 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
     vendaCriada = venda
     console.log('Venda criada', vendaCriada)
 
-    const itensCriados = await inserirItensVenda(vendaCriada.id, itensVenda)
+    const itensCriados = await inserirItensVenda(vendaCriada.id, itensVenda, userId)
     console.log('Itens da venda criados', itensCriados)
 
-    estoqueAtualizado = await atualizarEstoqueBanco(ajustesEstoque)
+    estoqueAtualizado = await atualizarEstoqueBanco(ajustesEstoque, userId)
     console.log('Estoque atualizado no banco', estoqueAtualizado)
 
     return {
@@ -479,11 +533,11 @@ export async function salvarVenda({ carrinho, total, formaPagamento }) {
     console.log('Erro ao salvar venda', error)
 
     if (estoqueAtualizado.length) {
-      await reverterEstoqueBanco(estoqueAtualizado)
+      await reverterEstoqueBanco(estoqueAtualizado, userId)
     }
 
-    if (vendaCriada?.id) {
-      await reverterVenda(vendaCriada.id)
+    if (vendaCriada?.id && userId) {
+      await reverterVenda(vendaCriada.id, userId)
     }
 
     return {

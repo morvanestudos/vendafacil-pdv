@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { supabase } from '../lib/supabase'
+import { getUser, supabase } from '../lib/supabase'
 import formatCurrency from '../utils/formatCurrency'
 
 const nomesDiasSemana = [
@@ -106,11 +106,18 @@ function RelatorioSemanal() {
           )
         }
 
+        const user = await getUser()
+
+        if (!user?.id) {
+          throw new Error('Usuario nao autenticado. Faca login novamente.')
+        }
+
         const { inicioPeriodo, fimPeriodo } = obterPeriodoSemanal()
 
         const { data: vendasData, error: vendasError } = await supabase
           .from('vendas')
           .select('total, created_at')
+          .eq('user_id', user.id)
           .gte('created_at', inicioPeriodo.toISOString())
           .lte('created_at', fimPeriodo.toISOString())
           .order('created_at', { ascending: true })
@@ -158,6 +165,7 @@ function RelatorioSemanal() {
           dias,
         })
       } catch (error) {
+        console.log('Erro ao carregar relatorio semanal', error)
         console.error('Erro ao carregar relatorio semanal', error)
 
         if (!ativo) {
